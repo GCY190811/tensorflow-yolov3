@@ -25,17 +25,17 @@ class Dataset(object):
     """implement Dataset here"""
     def __init__(self, dataset_type):
         self.annot_path  = cfg.TRAIN.ANNOT_PATH if dataset_type == 'train' else cfg.TEST.ANNOT_PATH
-        self.input_sizes = cfg.TRAIN.INPUT_SIZE if dataset_type == 'train' else cfg.TEST.INPUT_SIZE
+        self.input_sizes = cfg.TRAIN.INPUT_SIZE if dataset_type == 'train' else cfg.TEST.INPUT_SIZE #?
         self.batch_size  = cfg.TRAIN.BATCH_SIZE if dataset_type == 'train' else cfg.TEST.BATCH_SIZE
         self.data_aug    = cfg.TRAIN.DATA_AUG   if dataset_type == 'train' else cfg.TEST.DATA_AUG
 
         self.train_input_sizes = cfg.TRAIN.INPUT_SIZE
-        self.strides = np.array(cfg.YOLO.STRIDES)
+        self.strides = np.array(cfg.YOLO.STRIDES) #?
         self.classes = utils.read_class_names(cfg.YOLO.CLASSES)
         self.num_classes = len(self.classes)
-        self.anchors = np.array(utils.get_anchors(cfg.YOLO.ANCHORS))
-        self.anchor_per_scale = cfg.YOLO.ANCHOR_PER_SCALE
-        self.max_bbox_per_scale = 150
+        self.anchors = np.array(utils.get_anchors(cfg.YOLO.ANCHORS)) # numpy (3,3,2)
+        self.anchor_per_scale = cfg.YOLO.ANCHOR_PER_SCALE #?
+        self.max_bbox_per_scale = 150 #?输出box设置
 
         self.annotations = self.load_annotations(dataset_type)
         self.num_samples = len(self.annotations)
@@ -46,7 +46,7 @@ class Dataset(object):
     def load_annotations(self, dataset_type):
         with open(self.annot_path, 'r') as f:
             txt = f.readlines()
-            annotations = [line.strip() for line in txt if len(line.strip().split()[1:]) != 0]
+            annotations = [line.strip() for line in txt if len(line.strip().split()[1:]) != 0] #处理没有标签的情况
         np.random.shuffle(annotations)
         return annotations
 
@@ -56,8 +56,8 @@ class Dataset(object):
     def __next__(self):
 
         with tf.device('/cpu:0'):
-            self.train_input_size = random.choice(self.train_input_sizes)
-            self.train_output_sizes = self.train_input_size // self.strides
+            self.train_input_size = random.choice(self.train_input_sizes) #同一个batch 输入图片的尺寸一定
+            self.train_output_sizes = self.train_input_size // self.strides #[train_input_size//STRIDES[0], train_input_size//STRIDES[1], train_input_size//STRIDES[2]]
 
             batch_image = np.zeros((self.batch_size, self.train_input_size, self.train_input_size, 3))
 
@@ -95,7 +95,7 @@ class Dataset(object):
             else:
                 self.batch_count = 0
                 np.random.shuffle(self.annotations)
-                raise StopIteration
+                raise StopIteration  # 退出不断返回的值
 
     def random_horizontal_flip(self, image, bboxes):
 

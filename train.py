@@ -43,12 +43,12 @@ class YoloTrain(object):
         self.steps_per_period    = len(self.trainset)
         self.sess                = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 
-        with tf.name_scope('define_input'):
-            self.input_data   = tf.placeholder(dtype=tf.float32, name='input_data')
-            self.label_sbbox  = tf.placeholder(dtype=tf.float32, name='label_sbbox')
+        with tf.name_scope('define_input'): # 范围内的变量在结构图中显示在一起
+            self.input_data   = tf.placeholder(dtype=tf.float32, name='input_data') # 数据输入接口
+            self.label_sbbox  = tf.placeholder(dtype=tf.float32, name='label_sbbox') # 输出大，中，小box
             self.label_mbbox  = tf.placeholder(dtype=tf.float32, name='label_mbbox')
             self.label_lbbox  = tf.placeholder(dtype=tf.float32, name='label_lbbox')
-            self.true_sbboxes = tf.placeholder(dtype=tf.float32, name='sbboxes')
+            self.true_sbboxes = tf.placeholder(dtype=tf.float32, name='sbboxes') # GT box
             self.true_mbboxes = tf.placeholder(dtype=tf.float32, name='mbboxes')
             self.true_lbboxes = tf.placeholder(dtype=tf.float32, name='lbboxes')
             self.trainable     = tf.placeholder(dtype=tf.bool, name='training')
@@ -124,7 +124,7 @@ class YoloTrain(object):
 
     def train(self):
         self.sess.run(tf.global_variables_initializer())
-        try:
+        try: # 有初始权重，
             print('=> Restoring weights from: %s ... ' % self.initial_weight)
             self.loader.restore(self.sess, self.initial_weight)
         except:
