@@ -1,3 +1,10 @@
+#1. Crop origin Image ----> (1280*720), gray
+#2. input labels.csv format:
+#   frame xMin yMin xMax yMax occluded label attributes(Only appears on traffic lights)  
+#
+#3. output labels.csv format:
+#   
+
 import glob
 import json
 import os
@@ -85,20 +92,20 @@ def define_args():
         description=
         'Crop Udacity Dataset2 to 1280*720, RGB2Gray, TF-yolo3 format')
     parser.add_argument('-IIf',
-                        default='/home/guo/Documents/Dataset/object-dataset',
+                        default='/home/guo/moDisk/Dataset/object-detection-crowdai',
                         help='Input Image folder')
     parser.add_argument(
         '-IL',
-        default="/home/guo/Documents/Dataset/object-dataset/labels.csv",
+        default="/home/guo/moDisk/Dataset/object-detection-crowdai/convert_labels.csv",
         help='Input Label file')
     parser.add_argument(
         '-SCL',
         default=
-        "/home/guo/Documents/Dataset/self_driving_car_dataset2_label.csv",
+        "/home/guo/moDisk/Dataset/self_driving_car_dataset2_label.csv",
         help='Selected Class file')
     parser.add_argument(
         '-Of',
-        default='/home/guo/Documents/Dataset/object-dataset-crop',
+        default='/home/guo/moDisk/Dataset/object-detection-crowdai-crop',
         help='Output folder')
     parser.add_argument('-Ch', default=720, type=int, help='Crop Height')
     parser.add_argument('-Cw', default=1280, type=int, help='Crop Width')
@@ -123,6 +130,7 @@ def CropImg(ImgLists):
                       args.Cw // 2:imgWidth // 2 + args.Cw // 2]
         imgNewFile = os.path.join(args.Of, imgfile.split("/")[-1])
         cv2.imwrite(imgNewFile, new_img)
+        break
 
     print("Crop: leftX {}, leftTop {}, rightX {}, rightBottom {}".format(
         leftX, leftTop, rightX, rightBottom))
@@ -143,11 +151,13 @@ def CropBox(Labels, LabelClass, ImageLists):
 
     for label in Labels:
         item = label[0].split(" ")
-        if item[6][1:-1] not in LabelClass:  # 排除不要的类别标签
+        if item[6].find("\"") >=0:
+            item[6] = item[6][1:-1]
+        if item[6] not in LabelClass :  # 排除不要的类别标签
             continue
         frame = item[0]
         box = object_bbox_udacity2(frame, int(item[1]), int(item[2]),
-                                   int(item[3]), int(item[4]), item[6][1:-1],
+                                   int(item[3]), int(item[4]), item[6],
                                    leftX, leftTop, rightX, rightBottom)
         if not frame in ImgLabel:
             ImgLabel[frame] = []
@@ -157,7 +167,7 @@ def CropBox(Labels, LabelClass, ImageLists):
         for imgPath in ImageLists:
             imageName = imgPath.split("\n")[0].split("/")[-1]
             linelist = []
-            linelist.append(imageName)
+            linelist.append(os.path.join(args.Of, imageName))
             if imageName in ImgLabel:
 
                 if args.Show:
@@ -180,17 +190,17 @@ def CropBox(Labels, LabelClass, ImageLists):
 
                     if cropLabel.crop():
                         # label name
-                        linelist.append(",".join((str(cropLabel.xMin),
-                                                 str(cropLabel.yMin),
-                                                 str(cropLabel.xMax),
-                                                 str(cropLabel.yMax),
-                                                 cropLabel.label)))
-                        # label index
                         # linelist.append(",".join((str(cropLabel.xMin),
                         #                          str(cropLabel.yMin),
                         #                          str(cropLabel.xMax),
                         #                          str(cropLabel.yMax),
-                        #                          str(LabelClass.index(cropLabel.label)))))
+                        #                          cropLabel.label)))
+                        #label index
+                        linelist.append(",".join((str(cropLabel.xMin),
+                                                 str(cropLabel.yMin),
+                                                 str(cropLabel.xMax),
+                                                 str(cropLabel.yMax),
+                                                 str(LabelClass.index(cropLabel.label)))))
 
 
                         # print(",".join((str(cropLabel.xMin),

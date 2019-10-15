@@ -1,3 +1,6 @@
+# label format:
+#   frame xMin yMin xMax yMax occluded label attributes(Only appears on traffic lights)  
+
 import glob
 import json
 import os
@@ -9,9 +12,12 @@ import math
 import numpy as np
 import cv2
 
-Path = "/home/guo/Documents/Dataset/object-dataset"
+Path = "/home/guo/moDisk/Dataset/object-dataset"
+# Path = "/home/guo/moDisk/Dataset/object-detection"
 imagefiles = glob.glob(os.path.join(Path, "*.jpg"))
 labelfile = os.path.join(Path, "labels.csv")
+# labelfile = "/home/guo/moDisk/Dataset/convert_labels_crowdai.csv"
+# labelfile = "/home/guo/moDisk/Dataset/object-detection-crowdai/convert_labels.csv"
 
 imagelist = []
 for file in imagefiles:
@@ -41,7 +47,8 @@ for index in range(len(imagelist)):
             cv2.putText(image, box[5],
                         (xMin, yMin), cv2.FONT_HERSHEY_SIMPLEX,
                            0.5, (0, 255, 0), 2)
-        cv2.imwrite(Path+"/draw_"+imagelist[index], image)
+
+        cv2.imwrite(Path+"-draw/"+imagelist[index], image)
         # cv2.namedWindow("image",cv2.WINDOW_AUTOSIZE)
         # cv2.imshow("image", image)
         # print(imagelist[index])
@@ -49,4 +56,5 @@ for index in range(len(imagelist)):
         # cv2.destroyAllWindows()
         # if key == "q":
         #     break
-
+    if index > 150:
+        break
