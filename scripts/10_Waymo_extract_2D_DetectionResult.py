@@ -50,13 +50,13 @@ def show_camera_image(camera_image, camera_labels, index, segmentName, cmap=None
     drawfolder = "/opt/home/moDisk/Dataset/Waymo/ImgDraw/"+segmentName
     if not os.path.exists(drawfolder):
         os.makedirs(drawfolder)
-    cv2.imwrite(drawfolder+"/"+segmentName.split("_", 1)[1]+"_"+open_dataset.CameraName.Name.Name(
+    cv2.imwrite(drawfolder+"/"+segmentName.split("_", 2)[-1]+"_"+open_dataset.CameraName.Name.Name(
         camera_image.name)+"_draw_"+str(index)+".jpeg", img[:,:,[2,1,0]])
 
     Imgfolder = "/opt/home/moDisk/Dataset/Waymo/Img/"+segmentName
     if not os.path.exists(Imgfolder):
         os.makedirs(Imgfolder)
-    cv2.imwrite(Imgfolder+"/"+segmentName.split("_", 1)[1]+"_"+open_dataset.CameraName.Name.Name(
+    cv2.imwrite(Imgfolder+"/"+segmentName.split("_", 2)[-1]+"_"+open_dataset.CameraName.Name.Name(
         camera_image.name)+"_"+str(index)+".jpeg", tf.image.decode_jpeg(camera_image.image).numpy()[:,:,[2,1,0]])
 
 
@@ -98,7 +98,7 @@ def main():
 
         print("New tfrecord!!!")
         recordFileNum += 1
-        # if recordFileNum >= 2:
+        # if recordFileNum >= 1:
         #     break
 
 

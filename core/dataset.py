@@ -25,13 +25,13 @@ class Dataset(object):
     """implement Dataset here"""
     def __init__(self, dataset_type):
         self.annot_path  = cfg.TRAIN.ANNOT_PATH if dataset_type == 'train' else cfg.TEST.ANNOT_PATH
-        self.input_sizes = cfg.TRAIN.INPUT_SIZE if dataset_type == 'train' else cfg.TEST.INPUT_SIZE #?
+        self.input_sizes = cfg.TRAIN.INPUT_SIZE if dataset_type == 'train' else cfg.TEST.INPUT_SIZE
         self.batch_size  = cfg.TRAIN.BATCH_SIZE if dataset_type == 'train' else cfg.TEST.BATCH_SIZE
         self.data_aug    = cfg.TRAIN.DATA_AUG   if dataset_type == 'train' else cfg.TEST.DATA_AUG
 
         self.train_input_sizes = cfg.TRAIN.INPUT_SIZE
         self.strides = np.array(cfg.YOLO.STRIDES) #?
-        self.classes = utils.read_class_names(cfg.YOLO.CLASSES)
+        self.classes = utils.read_class_names(cfg.YOLO.CLASSES) # dict[0]=person, dict[1]=bicycle, dict[2]=car
         self.num_classes = len(self.classes)
         self.anchors = np.array(utils.get_anchors(cfg.YOLO.ANCHORS)) # numpy (3,3,2)
         self.anchor_per_scale = cfg.YOLO.ANCHOR_PER_SCALE #?
@@ -47,22 +47,22 @@ class Dataset(object):
         with open(self.annot_path, 'r') as f:
             txt = f.readlines()
             annotations = [line.strip() for line in txt if len(line.strip().split()[1:]) != 0] #处理没有标签的情况
-        np.random.shuffle(annotations)
-        return annotations
+        np.random.shuffle(annotations) 
+        return annotations # images
 
-    def __iter__(self):
+    def __iter__(self): 
         return self
 
     def __next__(self):
 
         with tf.device('/cpu:0'):
-            self.train_input_size = random.choice(self.train_input_sizes) #同一个batch 输入图片的尺寸一定
-            self.train_output_sizes = self.train_input_size // self.strides #[train_input_size//STRIDES[0], train_input_size//STRIDES[1], train_input_size//STRIDES[2]]
+            self.train_input_size = random.choice(self.train_input_sizes) #
+            self.train_output_sizes = self.train_input_size // self.strides # 3 output layer
 
             batch_image = np.zeros((self.batch_size, self.train_input_size, self.train_input_size, 3))
 
             batch_label_sbbox = np.zeros((self.batch_size, self.train_output_sizes[0], self.train_output_sizes[0],
-                                          self.anchor_per_scale, 5 + self.num_classes))
+                                          self.anchor_per_scale, 5 + self.num_classes)) #? anchor_per_scale, box_posi(4) + confidence? + num_classes
             batch_label_mbbox = np.zeros((self.batch_size, self.train_output_sizes[1], self.train_output_sizes[1],
                                           self.anchor_per_scale, 5 + self.num_classes))
             batch_label_lbbox = np.zeros((self.batch_size, self.train_output_sizes[2], self.train_output_sizes[2],
@@ -77,7 +77,7 @@ class Dataset(object):
                 while num < self.batch_size:
                     index = self.batch_count * self.batch_size + num
                     if index >= self.num_samples: index -= self.num_samples
-                    annotation = self.annotations[index]
+                    annotation = self.annotations[index] #loop select every image
                     image, bboxes = self.parse_annotation(annotation)
                     label_sbbox, label_mbbox, label_lbbox, sbboxes, mbboxes, lbboxes = self.preprocess_true_boxes(bboxes)
 
@@ -89,10 +89,10 @@ class Dataset(object):
                     batch_mbboxes[num, :, :] = mbboxes
                     batch_lbboxes[num, :, :] = lbboxes
                     num += 1
-                self.batch_count += 1
+                self.batch_count += 1  # return one batch data
                 return batch_image, batch_label_sbbox, batch_label_mbbox, batch_label_lbbox, \
                        batch_sbboxes, batch_mbboxes, batch_lbboxes
-            else:
+            else: # new epoch
                 self.batch_count = 0
                 np.random.shuffle(self.annotations)
                 raise StopIteration  # 退出不断返回的值
