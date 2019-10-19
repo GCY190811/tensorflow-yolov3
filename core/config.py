@@ -46,6 +46,7 @@ __C.TRAIN.WARMUP_EPOCHS         = 2
 __C.TRAIN.FISRT_STAGE_EPOCHS    = 20
 __C.TRAIN.SECOND_STAGE_EPOCHS   = 30
 __C.TRAIN.INITIAL_WEIGHT        = "./checkpoint/yolov3_coco_demo.ckpt"
+__C.TRAIN.MIXUP                 = True
 
 
 
@@ -63,6 +64,7 @@ __C.TEST.WEIGHT_FILE            = "./checkpoint/yolov3_test_loss=9.2099.ckpt-5"
 __C.TEST.SHOW_LABEL             = True
 __C.TEST.SCORE_THRESHOLD        = 0.3
 __C.TEST.IOU_THRESHOLD          = 0.45
+__C.TEST.MIXUP                  = False
 
 
 
