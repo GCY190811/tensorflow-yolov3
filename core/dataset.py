@@ -28,9 +28,10 @@ class Dataset(object):
         self.input_sizes = cfg.TRAIN.INPUT_SIZE if dataset_type == 'train' else cfg.TEST.INPUT_SIZE
         self.batch_size  = cfg.TRAIN.BATCH_SIZE if dataset_type == 'train' else cfg.TEST.BATCH_SIZE
         self.data_aug    = cfg.TRAIN.DATA_AUG   if dataset_type == 'train' else cfg.TEST.DATA_AUG
+        self.mixup       = cfg.TRAIN.MIXUP      if dataset_type == 'train' else cfg.TEST.MIXUP
 
         self.train_input_sizes = cfg.TRAIN.INPUT_SIZE
-        self.strides = np.array(cfg.YOLO.STRIDES) #?
+        self.strides = np.array(cfg.YOLO.STRIDES) # downsample ratio [8, 16, 32]
         self.classes = utils.read_class_names(cfg.YOLO.CLASSES) # dict[0]=person, dict[1]=bicycle, dict[2]=car
         self.num_classes = len(self.classes)
         self.anchors = np.array(utils.get_anchors(cfg.YOLO.ANCHORS)) # numpy (3,3,2)
@@ -77,8 +78,8 @@ class Dataset(object):
                 while num < self.batch_size:
                     index = self.batch_count * self.batch_size + num
                     if index >= self.num_samples: index -= self.num_samples
-                    annotation = self.annotations[index] #loop select every image
-                    image, bboxes = self.parse_annotation(annotation)
+                    #annotation = self.annotations[index] #loop select every image
+                    image, bboxes = self.parse_annotation(index)
                     label_sbbox, label_mbbox, label_lbbox, sbboxes, mbboxes, lbboxes = self.preprocess_true_boxes(bboxes)
 
                     batch_image[num, :, :, :] = image
@@ -151,14 +152,65 @@ class Dataset(object):
 
         return image, bboxes
 
-    def parse_annotation(self, annotation):
+    def MixupDetection(self, img1, bbox1, idx1, mixup_generator=None, *args):
+        lambd = 1
 
+        # Get a random lambad ratio from generator
+        if mixup_generator is not None:
+            lambd = max(0, min(1, mixup_generator(*args)))
+        
+        if lambd >= 1:
+            weights1 = np.ones((bbox1.shape[0], 1))
+            bbox1 = np.hstack((bbox1, weights1))
+            return img1, bbox1
+
+        # second image
+        idx2 = np.random.choice(np.delete(np.arange(len(self.annotations)), idx1))
+        line = self.annotations[idx2].split()
+        img2_path = line[0]
+        if not os.path.exists(img2_path):
+            raise KeyError("%s does not exist ... " %img2_path)
+        img2 = np.array(cv2.imread(img2_path))
+        bbox2 = np.array([list(map(lambda x: int(float(x)), box.split(','))) for box in line[1:]])
+
+        # mixup two images
+        height = max(img1.shape[0], img2.shape[0])
+        width = max(img1.shape[1], img2.shape[1])
+        mix_img = np.zeros((height,width,3), np.float32)
+        mix_img[:img1.shape[0],:img1.shape[1],:] = img1.astype('float32') * lambd
+        mix_img[:img2.shape[0],:img2.shape[1],:] += img2.astype('float32') * (1. - lambd)
+        mix_img = mix_img.astype('uint8')
+        y1 = np.hstack((bbox1, np.full((bbox1.shape[0], 1), lambd)))
+        y2 = np.hstack((bbox2, np.full((bbox2.shape[0], 1), 1. - lambd)))
+        mix_bbox = np.vstack((y1, y2))
+        return mix_img, mix_bbox
+
+
+    def parse_annotation(self, index):
+        """ Read, preprocess image & bboxes
+
+        Parameters
+        ----------
+        annotation : one line in train/test.txt
+
+        """
+        annotation = self.annotations[index]
         line = annotation.split()
         image_path = line[0]
         if not os.path.exists(image_path):
             raise KeyError("%s does not exist ... " %image_path)
         image = np.array(cv2.imread(image_path))
         bboxes = np.array([list(map(lambda x: int(float(x)), box.split(','))) for box in line[1:]])
+        # array([[263, 211, 324, 339, 9],
+        #        [165, 264, 253, 372, 8],
+        #        [241, 194, 295, 299, 9]])
+
+        if self.mixup:
+            image, bboxes = self.MixupDetection(np.copy(image), np.copy(bboxes), index)
+        # array([[263, 211, 324, 339, 9, 0.7],
+        #        [165, 264, 253, 372, 8, 0.7],
+        #        [241, 194, 295, 299, 9, 0.3]])
+
 
         if self.data_aug:
             image, bboxes = self.random_horizontal_flip(np.copy(image), np.copy(bboxes))
@@ -201,18 +253,26 @@ class Dataset(object):
             bbox_coor = bbox[:4]
             bbox_class_ind = bbox[4]
 
+            # smooth label
             onehot = np.zeros(self.num_classes, dtype=np.float)
             onehot[bbox_class_ind] = 1.0
             uniform_distribution = np.full(self.num_classes, 1.0 / self.num_classes)
             deta = 0.01
             smooth_onehot = onehot * (1 - deta) + deta * uniform_distribution
 
-            bbox_xywh = np.concatenate([(bbox_coor[2:] + bbox_coor[:2]) * 0.5, bbox_coor[2:] - bbox_coor[:2]], axis=-1)
+            bbox_xywh = np.concatenate([(bbox_coor[2:] + bbox_coor[:2]) * 0.5, bbox_coor[2:] - bbox_coor[:2]], axis=-1) # [xcernter, ycenter, width, height]
             bbox_xywh_scaled = 1.0 * bbox_xywh[np.newaxis, :] / self.strides[:, np.newaxis]
+            # [xmin, ymin, width, height] 
+            # ==========>
+            # [
+            #  [xmin/8,  ymin/8,  width/8,  height/8]
+            #  [xmin/16, ymin/16, width/16, height/16]
+            #  [xmin/32, ymin/32, width/32, height/32]
+            # ]
 
             iou = []
             exist_positive = False
-            for i in range(3):
+            for i in range(3): # different ratio 8, 16, 32
                 anchors_xywh = np.zeros((self.anchor_per_scale, 4))
                 anchors_xywh[:, 0:2] = np.floor(bbox_xywh_scaled[i, 0:2]).astype(np.int32) + 0.5
                 anchors_xywh[:, 2:4] = self.anchors[i]
