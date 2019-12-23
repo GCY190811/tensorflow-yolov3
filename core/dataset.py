@@ -1,16 +1,3 @@
-#! /usr/bin/env python
-# coding=utf-8
-#================================================================
-#   Copyright (C) 2019 * Ltd. All rights reserved.
-#
-#   Editor      : VIM
-#   File name   : dataset.py
-#   Author      : YunYang1994
-#   Created date: 2019-03-15 18:05:03
-#   Description :
-#
-#================================================================
-
 import os
 import cv2
 import random
@@ -20,7 +7,6 @@ import core.utils as utils
 from core.config import cfg
 
 
-
 class Dataset(object):
     """implement Dataset here"""
     def __init__(self, dataset_type):
@@ -28,7 +14,6 @@ class Dataset(object):
         self.input_sizes = cfg.TRAIN.INPUT_SIZE if dataset_type == 'train' else cfg.TEST.INPUT_SIZE
         self.batch_size  = cfg.TRAIN.BATCH_SIZE if dataset_type == 'train' else cfg.TEST.BATCH_SIZE
         self.data_aug    = cfg.TRAIN.DATA_AUG   if dataset_type == 'train' else cfg.TEST.DATA_AUG
-        self.mixup       = cfg.TRAIN.MIXUP      if dataset_type == 'train' else cfg.TEST.MIXUP
 
         self.train_input_sizes = cfg.TRAIN.INPUT_SIZE
         self.strides = np.array(cfg.YOLO.STRIDES) # downsample ratio [8, 16, 32]
@@ -36,7 +21,7 @@ class Dataset(object):
         self.num_classes = len(self.classes)
         self.anchors = np.array(utils.get_anchors(cfg.YOLO.ANCHORS)) # numpy (3,3,2)
         self.anchor_per_scale = cfg.YOLO.ANCHOR_PER_SCALE #?
-        self.max_bbox_per_scale = 150 #?输出box设置
+        self.max_bbox_per_scale = 150
 
         self.annotations = self.load_annotations(dataset_type)
         self.num_samples = len(self.annotations)
@@ -244,7 +229,8 @@ class Dataset(object):
 
     def preprocess_true_boxes(self, bboxes):
 
-        label = [np.zeros((self.train_output_sizes[i], self.train_output_sizes[i], self.anchor_per_scale,
+        label = [np.zeros((self.train_output_sizes[i],
+                           self.train_output_sizes[i], self.anchor_per_scale,
                            5 + self.num_classes)) for i in range(3)]
         bboxes_xywh = [np.zeros((self.max_bbox_per_scale, 4)) for _ in range(3)]
         bbox_count = np.zeros((3,))
