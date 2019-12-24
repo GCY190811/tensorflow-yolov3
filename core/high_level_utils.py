@@ -1,8 +1,4 @@
-import random
-import colorsys
 import numpy as np
-import tensorflow as tf
-from core.config import cfg
 
 
 def read_image_box_from_text(text_path):
@@ -17,8 +13,8 @@ def read_image_box_from_text(text_path):
         for line in f.readlines():
             line = line.strip()
             example_line = line.split(' ')
-            
-            image_path  = example_line[0]
+
+            image_path = example_line[0]
             image_boxes = example_line[1:]
 
             bboxes = np.zeros([len(image_boxes), 4], dtype=np.float32)
