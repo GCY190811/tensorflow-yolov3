@@ -258,12 +258,13 @@ class Dataset(object):
 
             iou = []
             exist_positive = False
-            for i in range(3): # different ratio 8, 16, 32
+            for i in range(3):  # different ratio 8, 16, 32
                 anchors_xywh = np.zeros((self.anchor_per_scale, 4))
                 anchors_xywh[:, 0:2] = np.floor(bbox_xywh_scaled[i, 0:2]).astype(np.int32) + 0.5
                 anchors_xywh[:, 2:4] = self.anchors[i]
 
-                iou_scale = self.bbox_iou(bbox_xywh_scaled[i][np.newaxis, :], anchors_xywh)
+                iou_scale = self.bbox_iou(bbox_xywh_scaled[i][np.newaxis, :],
+                                          anchors_xywh)
                 iou.append(iou_scale)
                 iou_mask = iou_scale > 0.3
 

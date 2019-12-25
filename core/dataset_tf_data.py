@@ -77,7 +77,7 @@ def preprocess(mode, image, true_boxes, true_labels):
 
     image, bboxes = image_preprocess(image, true_boxes, input_size)
     label_sbbox, label_mbbox, label_lbbox, sbboxes, mbboxes, lbboxes = bboxes_preprocess(
-        bboxes, true_labels, output_sizes, num_classes)
+        bboxes, true_labels, output_sizes, num_classes, anchors)
 
     batch_image = np.zeros((input_size, input_size, 3))
     batch_label_sbbox = np.zeros(
@@ -120,93 +120,58 @@ def image_preprocess(image, bboxes, input_size):
     return image, bboxes
 
 
-def bboxes_preprocess(bboxes, labels, output_sizes, num_classes):
-    '''
-    input:
-        gt_bboxes, output_sizes, num_classes
-    output:
+def bboxes_preprocess(bboxes, labels, output_sizes, num_classes, anchors):
+    """将bboxes, labels转为计算loss时需要的格式
+
+    Parameters
+    ----------
+    bboxes: numpy
+        [[xmin, ymin, xmax, ymax]
+         [xmin, ymin, xmax, ymax]
+         ....
+         ]
+    labels: numpy
+        (N, )
+    output_sizes: list
+        [input_size/8, input_size/16, input_size/32]
+    num_classes: int
+    anchors: numpy
+        (3, 3, 2)
+
+    Returns
+    -------
         计算loss中使用的bbox
-    '''
-    label = [
+
+    """
+    print("bboxes".format(bboxes))
+    print("labels".format(labels))
+
+    bboxes_label = [
         np.zeros((output_sizes[i], output_sizes[i], cfg.YOLO.ANCHOR_PER_SCALE,
                   5 + num_classes)) for i in range(3)
     ]
-    bboxes_xywh = [
-        np.zeros((cfg.YOLO.MAX_BBOX_PER_SCALE, 4)) for _ in range(3)
-    ]
-    bbox_count = np.zeros((3, ))
+    bboxes_xywh = [np.zeros((cfg.YOLO.MAX_BBOX_PER_SCALE, 4)) for _ in range(3)]
+
+    bboxes_count = np.zeros((3, ))
 
     for bbox_index in range(len(bboxes)):
-        bbox_coor = bboxes[bbox_index]
-        bbox_class_ind = labels[bbox_index]
+        bboxCoor = bboxes[bbox_index]
+        bboxClassIndex = labels[bbox_index]
 
         # smooth label
         onehot = np.zeros(num_classes, dtype=np.float)
-        onehot[bbox_class_ind] = 1.0
-        uniform_distribution = np.full(num_classes,
-                                       1.0 / num_classes)
+        onehot[bboxClassIndex] = 1.0
+        uniform_distribution = np.full(num_classes, 1.0 / num_classes)
         deta = 0.01
-        smooth_onehot = onehot * (1 - deta) + deta * uniform_distribution
+        smoothOnehot = onehot * (1 - deta) + deta * uniform_distribution
 
         # bbox [xcernter, ycenter, width, height]
         bbox_xywh = np.concatenate(
-            [(bbox_coor[2:] + bbox_coor[:2]) * 0.5,
-             bbox_coor[2:] - bbox_coor[:2]],
+            [(bboxCoor[[0, 1]] + bboxCoor[[2, 3]]) * 0.5,
+             (bboxCoor[2:] - bboxCoor[:2])],
             axis=-1)
 
-        bbox_xywh_scaled = 1.0 * bbox_xywh[
-            np.newaxis, :] / strides[:, np.newaxis]
-        # [xmin, ymin, width, height]
-        # ==========>
-        # [
-        #  [xmin/8,  ymin/8,  width/8,  height/8]
-        #  [xmin/16, ymin/16, width/16, height/16]
-        #  [xmin/32, ymin/32, width/32, height/32]
-        # ]
-
-        iou = []
-        exist_positive = False
-        for i in range(3):  # different ratio 8, 16, 32
-            anchors_xywh = np.zeros((self.anchor_per_scale, 4))
-            anchors_xywh[:, 0:2] = np.floor(bbox_xywh_scaled[i, 0:2]).astype(
-                np.int32) + 0.5
-            anchors_xywh[:, 2:4] = self.anchors[i]
-
-            iou_scale = self.bbox_iou(bbox_xywh_scaled[i][np.newaxis, :],
-                                      anchors_xywh)
-            iou.append(iou_scale)
-            iou_mask = iou_scale > 0.3
-
-            if np.any(iou_mask):
-                xind, yind = np.floor(bbox_xywh_scaled[i,
-                                                       0:2]).astype(np.int32)
-
-                label[i][yind, xind, iou_mask, :] = 0
-                label[i][yind, xind, iou_mask, 0:4] = bbox_xywh
-                label[i][yind, xind, iou_mask, 4:5] = 1.0
-                label[i][yind, xind, iou_mask, 5:] = smooth_onehot
-
-                bbox_ind = int(bbox_count[i] % self.max_bbox_per_scale)
-                bboxes_xywh[i][bbox_ind, :4] = bbox_xywh
-                bbox_count[i] += 1
-
-                exist_positive = True
-
-        if not exist_positive:
-            best_anchor_ind = np.argmax(np.array(iou).reshape(-1), axis=-1)
-            best_detect = int(best_anchor_ind / self.anchor_per_scale)
-            best_anchor = int(best_anchor_ind % self.anchor_per_scale)
-            xind, yind = np.floor(bbox_xywh_scaled[best_detect,
-                                                   0:2]).astype(np.int32)
-
-            label[best_detect][yind, xind, best_anchor, :] = 0
-            label[best_detect][yind, xind, best_anchor, 0:4] = bbox_xywh
-            label[best_detect][yind, xind, best_anchor, 4:5] = 1.0
-            label[best_detect][yind, xind, best_anchor, 5:] = smooth_onehot
-
-            bbox_ind = int(bbox_count[best_detect] % self.max_bbox_per_scale)
-            bboxes_xywh[best_detect][bbox_ind, :4] = bbox_xywh
-            bbox_count[best_detect] += 1
-    label_sbbox, label_mbbox, label_lbbox = label
-    sbboxes, mbboxes, lbboxes = bboxes_xywh
-    return label_sbbox, label_mbbox, label_lbbox, sbboxes, mbboxes, lbboxes
+        for i in range(len(output_sizes)):
+            bbox_anchor = np.zeros((output_sizes[i], output_sizes[i],
+                                    cfg.YOLO.ANCHOR_PER_SCALE, 5 + num_classes))
+            bbox_anchor[:, :, i, ]
