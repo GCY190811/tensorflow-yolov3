@@ -90,3 +90,66 @@ def letterBox(image, target_size, gt_bboxes=None):
         gt_bboxes = gt_bboxes[:, [0, 2]] * scale + bw
         gt_bboxes = gt_bboxes[:, [1, 3]] * scale + bh
         return image_padded, gt_bboxes
+
+
+def iou(gtBox, boxAnchor, method="xywh"):
+    """计算iou
+
+    Parameters
+    ----------
+    gtBox: numpy (4)
+        [x, y, w, h]
+    bboxAnchor: numpy (M, 4(>4))
+        [[x, y, w, h, ...]]
+         [x, y, w, h, ...]
+         ...
+         ]
+    method: string
+        xywh: cx, xy, w, h
+
+    Returns
+    -------
+    score: numpy (M, ) 
+    """
+    # Todo: 矩阵方法优化计算, 现假设gtbox只有一个
+
+    if method == "xywh":
+        gtBoxXY = gtBox
+        gtBoxXY[0:2] -= gtBoxXY[2:4] * 0.5
+        gtBoxXY[2:4] = gtBoxXY[0:2] + gtBoxXY[2:4]
+
+        boxAnchorXY = boxAnchor
+        boxAnchorXY[:, 0:2] -= boxAnchorXY[:, 2:4] * 0.5
+        boxAnchorXY[:, 2:4] = boxAnchorXY[:, 0:2] + boxAnchorXY[:, 2:4]
+
+        scores = []
+        for boxPredict in boxAnchorXY:
+            union = np.concatenate((np.minimum(gtBoxXY[0:2], boxPredict[0:2]),
+                                    np.maximum(gtBoxXY[2:4], boxPredict[2:4])),
+                                   axis=0)
+
+            intrs = np.concatenate((np.maximum(gtBoxXY[0:2], boxPredict[0:2]),
+                                    np.minimum(gtBoxXY[2:4], boxPredict[2:4])),
+                                   axis=0)
+
+            if boxValid(intrs):
+                score = ((intrs[2] - intrs[0]) *
+                         (intrs[3] - intrs[1])) / ((union[2] - union[0]) *
+                                                   (union[3] - union[1]))
+                scores.append(score)
+            else:
+                scores = 0
+        return np.asarray(scores)
+
+
+def boxValid(box, method="XYXY"):
+    """check box coordinate
+
+    Returns
+    -------
+    valid: boolen
+    """
+    if box[2] > box[0] and box[3] > box[1]:
+        return True
+    else:
+        return False

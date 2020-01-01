@@ -77,7 +77,7 @@ def preprocess(mode, image, true_boxes, true_labels):
 
     image, bboxes = image_preprocess(image, true_boxes, input_size)
     label_sbbox, label_mbbox, label_lbbox, sbboxes, mbboxes, lbboxes = bboxes_preprocess(
-        bboxes, true_labels, output_sizes, num_classes, anchors)
+        bboxes, true_labels, output_sizes, num_classes, anchors, strides)
 
     batch_image = np.zeros((input_size, input_size, 3))
     batch_label_sbbox = np.zeros(
@@ -120,7 +120,8 @@ def image_preprocess(image, bboxes, input_size):
     return image, bboxes
 
 
-def bboxes_preprocess(bboxes, labels, output_sizes, num_classes, anchors):
+def bboxes_preprocess(bboxes, labels, output_sizes, num_classes, anchors,
+                      strides):
     """将bboxes, labels转为计算loss时需要的格式
 
     Parameters
@@ -150,10 +151,14 @@ def bboxes_preprocess(bboxes, labels, output_sizes, num_classes, anchors):
         np.zeros((output_sizes[i], output_sizes[i], cfg.YOLO.ANCHOR_PER_SCALE,
                   5 + num_classes)) for i in range(3)
     ]
-    bboxes_xywh = [np.zeros((cfg.YOLO.MAX_BBOX_PER_SCALE, 4)) for _ in range(3)]
-
+    bboxes_xywh = [
+        np.zeros((cfg.YOLO.MAX_BBOX_PER_SCALE, 4)) for _ in range(3)
+    ]
     bboxes_count = np.zeros((3, ))
 
+    # 存在有效的box
+    exist_positive = False
+    iou_statistic = []
     for bbox_index in range(len(bboxes)):
         bboxCoor = bboxes[bbox_index]
         bboxClassIndex = labels[bbox_index]
@@ -171,7 +176,53 @@ def bboxes_preprocess(bboxes, labels, output_sizes, num_classes, anchors):
              (bboxCoor[2:] - bboxCoor[:2])],
             axis=-1)
 
-        for i in range(len(output_sizes)):
-            bbox_anchor = np.zeros((output_sizes[i], output_sizes[i],
-                                    cfg.YOLO.ANCHOR_PER_SCALE, 5 + num_classes))
-            bbox_anchor[:, :, i, ]
+        for i in range(len(output_sizes)):  # 不同的scale
+            # GT的中心点，anchor的长和高
+            bbox_anchor = np.zeros((cfg.YOLO.ANCHOR_PER_SCALE, 5))
+            bbox_anchor[:, :2] = (bbox_xywh / strides[i])[:2]
+            bbox_anchor[:, 2:4] = anchors[i]
+
+            # 一种尺度下，一个gtbox和多种anchor的交并比
+            iou_score = img.iou(bbox_xywh, bbox_anchor, method="xywh")
+            # > 0.3认为这个box属于这个尺度下的，这个anchor
+            iou_threshold = iou_score > 0.3
+            iou_statistic.append(iou_score)
+
+            if np.any(iou_threshold):
+                # 找到每个box的位置
+                indx, indy = np.floor(bbox_anchor[:, :2]).astype(np.int32)
+                # 先清零, 使用iou_threshold这中骚操作
+                bboxes_label[i][indy, indx, iou_threshold, :] = 0
+                bboxes_label[i][indy, indx, iou_threshold, :4] = bbox_xywh
+                bboxes_label[i][indy, indx, iou_threshold, 4] = 1
+                bboxes_label[i][indy, indx, iou_threshold, 5:] = smoothOnehot
+
+                # bboxes找位置
+                boxIndex = bboxes_count[i] % cfg.YOLO.MAX_BBOX_PER_SCALE
+                bboxes_xywh[i][boxIndex, :4] = bbox_xywh
+                bboxes_count[i] += 1
+
+                exist_positive = True
+
+        if not exist_positive:
+            maxIndex = np.argmax(np.array(iou_statistic).reshape(-1))
+            best_scale = int(maxIndex / cfg.YOLO.ANCHOR_PER_SCALE)
+            best_anchor = int(maxIndex % cfg.YOLO.ANCHOR_PER_SCALE)
+            xind, yind = np.floor(
+                (bbox_xywh / strides[best_scale])[:2]).astype(np.int32)
+
+            bboxes_label[best_scale][yind, xind, best_anchor, :] = 0
+            bboxes_label[best_scale][yind, xind, best_anchor,
+                                     0:4] = bboxes_xywh
+            bboxes_label[best_scale][yind, xind, best_anchor, 4] = 1.0
+            bboxes_label[best_scale][yind, xind, best_anchor,
+                                     5:] = smoothOnehot
+
+            boxIndex = bboxes_count[best_scale] % cfg.YOLO.MAX_BBOX_PER_SCALE
+            bboxes_xywh[best_scale][boxIndex, :4] = bboxes_xywh
+            bboxes_count[best_scale] += 1
+
+    # 注意这里的 l,m,s 定义与原始代码作者的含义不一样, 返回值也不一样
+    label_lbbox, label_mbbox, label_sbbox = bboxes_label
+    lbboxes, mbboxes, sbboxes = bboxes_xywh
+    return label_lbbox, label_mbbox, label_sbbox, lbboxes, mbboxes, sbboxes
